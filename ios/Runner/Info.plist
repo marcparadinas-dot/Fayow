@@ -26,6 +26,17 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>FaYoW utilise votre position pour tracer votre itinéraire.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>FaYoW utilise votre position en arrière-plan pour tracer votre itinéraire.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>FaYoW utilise votre position en arrière-plan pour tracer votre itinéraire.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
