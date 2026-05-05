@@ -28,6 +28,7 @@ class _MapScreenState extends State<MapScreen> {
 
   LatLng? _currentPosition;
   bool _locationReady = false;
+  bool _modeReaffichage = false;
   List<PointInteret> _pointsInteret = [];
   Set<String> _poisLusIds = {};
   Set<String> _poisValidesDeclenches = {};  // validated : marqués lus dans Firestore
@@ -626,6 +627,201 @@ void _afficherDialogModerationPoi(PointInteret poi) {
   );
 }
 
+void _onReafficherClicked() {
+  if (_modeReaffichage) {
+    // Réinitialiser → recharger depuis Firestore
+    setState(() => _modeReaffichage = false);
+    _chargerPois();
+    return;
+  }
+
+  // Afficher les options
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Réafficher des anecdotes'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+      ],
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            title: const Text('Par secteur'),
+            leading: const Icon(Icons.location_on),
+            onTap: () {
+              Navigator.pop(context);
+              _reafficherParSecteur();
+            },
+          ),
+          ListTile(
+            title: const Text('Par date'),
+            leading: const Icon(Icons.calendar_today),
+            onTap: () {
+              Navigator.pop(context);
+              _reafficherParDate();
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+void _reafficherParSecteur() {
+  final position = _currentPosition;
+  if (position == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Localisation indisponible')),
+    );
+    return;
+  }
+
+  final rayons = ['100 mètres', '500 mètres', '1 kilomètre', '5 kilomètres'];
+  final rayonsMetres = [100.0, 500.0, 1000.0, 5000.0];
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Choisissez un rayon'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(rayons.length, (i) => ListTile(
+          title: Text(rayons[i]),
+          onTap: () {
+            Navigator.pop(context);
+            _appliquerReaffichageParSecteur(position, rayonsMetres[i]);
+          },
+        )),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _appliquerReaffichageParSecteur(LatLng centre, double rayonMetres) {
+  final poisDansLeRayon = _pointsInteret
+      .where((poi) => poi.status == PoiStatus.validated)
+      .where((poi) => _poisLusIds.contains(poi.id))
+      .where((poi) {
+        final dist = _distance.as(LengthUnit.Meter, centre, poi.position);
+        return dist <= rayonMetres;
+      })
+      .map((poi) => poi.id)
+      .toSet();
+
+  if (poisDansLeRayon.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Aucune anecdote lue dans ce secteur')),
+    );
+    return;
+  }
+
+  setState(() {
+    _poisLusIds.removeAll(poisDansLeRayon);
+    _poisValidesDeclenches.removeAll(poisDansLeRayon);
+    _modeReaffichage = true;
+  });
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('${poisDansLeRayon.length} anecdote(s) réaffichée(s)')),
+  );
+  if (_currentPosition != null) {
+  _verifierProximite(_currentPosition!);
+}
+}
+
+void _reafficherParDate() {
+  final periodes = ['Aujourd\'hui', 'Cette semaine', 'Ce mois-ci', 'Cette année'];
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Réafficher depuis...'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(periodes.length, (i) => ListTile(
+          title: Text(periodes[i]),
+          onTap: () {
+            Navigator.pop(context);
+            _appliquerReaffichageParDate(i);
+          },
+        )),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _appliquerReaffichageParDate(int periodeIndex) async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return;
+
+  final now = DateTime.now();
+  final DateTime depuis = switch (periodeIndex) {
+    0 => DateTime(now.year, now.month, now.day),        // Aujourd'hui
+    1 => now.subtract(const Duration(days: 7)),          // Cette semaine
+    2 => DateTime(now.year, now.month, 1),               // Ce mois-ci
+    3 => DateTime(now.year, 1, 1),                       // Cette année
+    _ => now.subtract(const Duration(days: 7)),
+  };
+
+  try {
+    // Charger les POIs lus depuis cette date depuis Firestore
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('readPois')
+        .where('readAt', isGreaterThanOrEqualTo: Timestamp.fromDate(depuis))
+        .get();
+
+    final ids = snapshot.docs.map((doc) => doc.id).toSet();
+
+    if (ids.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aucune anecdote lue sur cette période')),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _poisLusIds.removeAll(ids);
+      _poisValidesDeclenches.removeAll(ids);
+      _modeReaffichage = true;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${ids.length} anecdote(s) réaffichée(s)')),
+      );
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur : $e')),
+      );
+    }
+  }
+  if (_currentPosition != null) {
+  _verifierProximite(_currentPosition!);
+}
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -679,12 +875,17 @@ Container(
 Row(
   children: [
     Expanded(
-      child: ElevatedButton(
-        onPressed: _chargerPois,
-        child: const Text('Réafficher',
-            style: TextStyle(fontSize: 12)),
-      ),
+  child: ElevatedButton(
+    onPressed: _onReafficherClicked,
+    style: _modeReaffichage
+        ? ElevatedButton.styleFrom(backgroundColor: Colors.orange)
+        : null,
+    child: Text(
+      _modeReaffichage ? 'Retour' : 'Réafficher',
+      style: const TextStyle(fontSize: 12),
     ),
+  ),
+),
     const SizedBox(width: 4),
     Expanded(
       child: ElevatedButton(
