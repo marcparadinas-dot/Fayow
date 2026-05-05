@@ -1,0 +1,40 @@
+name: fayow
+description: FaYoW - Points d'intérêt géolocalisés
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.0
+  cloud_firestore: ^5.4.0
+
+  # Carte
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
+
+  # Géolocalisation
+  geolocator: ^11.0.0
+
+  # TTS
+  flutter_tts: ^3.8.5
+
+  # Permissions
+  permission_handler: ^11.3.0
+
+  # Foreground Service
+  flutter_foreground_task: ^8.15.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
