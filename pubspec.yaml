@@ -22,6 +22,7 @@ dependencies:
 
   # Géolocalisation
   geolocator: ^11.0.0
+  flutter_compass: ^0.8.0
 
   # TTS
   flutter_tts: ^3.8.5

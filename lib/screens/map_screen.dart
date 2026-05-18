@@ -17,6 +17,9 @@ import 'profil_screen.dart';
 import '../services/score_service.dart';
 import 'classement_screen.dart';
 import '../services/mail_service.dart';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+import 'package:flutter_compass/flutter_compass.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -33,6 +36,7 @@ class _MapScreenState extends State<MapScreen> {
   final CommuneService _communeService = CommuneService();
 
   LatLng? _currentPosition;
+  double _currentHeading = 0.0; // ← ajouter cette ligne
   bool _locationReady = false;
   bool _modeReaffichage = false;
   bool _poisCharges = false;
@@ -53,6 +57,14 @@ void initState() {
   _communeService.initialiser(_ttsService.tts); // ← passer l'instance
   _isModerator = AuthService.isModerator;
   _initLocation();
+  FlutterCompass.events!.listen((CompassEvent event) {
+  if (!mounted) return;
+  if (event.heading != null) {
+    setState(() {
+      _currentHeading = event.heading!;
+    });
+  }
+});
   _chargerPois();
 }
 
@@ -114,7 +126,6 @@ Future<void> _chargerPois() async {
     );
   }*/
 }
-
 Future<void> _initLocation() async {
   try {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -133,40 +144,41 @@ Future<void> _initLocation() async {
       return;
     }
 
-    // Annuler toute subscription précédente
-    await _locationSubscription?.cancel();
+    // Position initiale immédiate → la carte s'affiche tout de suite
+    final Position pos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+    if (!mounted) return;
+    setState(() {
+      _currentPosition = LatLng(pos.latitude, pos.longitude);
+      _locationReady = true;
+    });
 
+    // Stream pour les mises à jour suivantes
+    await _locationSubscription?.cancel();
     _locationSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 5,
+        distanceFilter: 1,
       ),
     ).listen((position) {
       if (!mounted) return;
       final nouvellePosition = LatLng(position.latitude, position.longitude);
-
-      if (!_locationReady) {
-        setState(() {
-          _currentPosition = nouvellePosition;
-          _locationReady = true;
-        });
-      } else {
-        setState(() {
-          _currentPosition = nouvellePosition;
-        });
-        _mapController.move(nouvellePosition, 16.0);
-      }
+      setState(() {
+        _currentPosition = nouvellePosition;
+      });
+      _mapController.move(nouvellePosition, 16.0);
       _verifierProximite(nouvellePosition);
-// Annoncer la commune uniquement après chargement des POIs
-if (_poisCharges) {
-  _communeService.verifierCommune(
-    latitude: position.latitude,
-    longitude: position.longitude,
-    pointsInteret: _pointsInteret,
-    poisLusIds: _poisLusIds,
-    ttsEnCours: _ttsService.estEnCoursDeLecture,
-  );
-}
+
+      if (_poisCharges) {
+        _communeService.verifierCommune(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          pointsInteret: _pointsInteret,
+          poisLusIds: _poisLusIds,
+          ttsEnCours: _ttsService.estEnCoursDeLecture,
+        );
+      }
     }, onError: (e) {
       print('Erreur stream GPS : $e');
       _useFallbackPosition();
@@ -1093,12 +1105,14 @@ Widget build(BuildContext context) {
                           if (_currentPosition != null)
                             Marker(
                               point: _currentPosition!,
-                              width: 40,
-                              height: 40,
-                              child: const Icon(
-                                Icons.navigation,
-                                color: Colors.blue,
-                                size: 40,
+                              width: 48,
+                              height: 48,
+                              child: Transform.rotate(
+                                angle: _currentHeading * (math.pi / 180.0),
+                                child: CustomPaint(
+                                  size: const Size(48, 48),
+                                  painter: _DirectionMarkerPainter(color: Colors.blue),
+                                ),
                               ),
                             ),
                         ],
@@ -1254,4 +1268,46 @@ Widget build(BuildContext context) {
     ),
   );
 }
+}
+// ---------------------------------------------------------------------------
+// Painter : cercle blanc bordé de bleu avec flèche directionnelle
+// La pointe de la flèche pointe vers le haut (= nord = 0°).
+// La rotation est appliquée par Transform.rotate dans le widget parent.
+// ---------------------------------------------------------------------------
+
+class _DirectionMarkerPainter extends CustomPainter {
+  final Color color;
+  const _DirectionMarkerPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 2;
+
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = const Color(0x33FFFFFF) // blanc très légèrement translucide
+        ..style = PaintingStyle.fill,
+    );
+
+    canvas.drawCircle(center, radius,
+        Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 3);
+
+    final double h = radius * 1.1;
+    final double w = radius * 0.50;
+
+    final ui.Path path = ui.Path();
+    path.moveTo(center.dx, center.dy - h * 0.56);
+    path.lineTo(center.dx - w, center.dy + h * 0.36);
+    path.lineTo(center.dx, center.dy + h * 0.16);
+    path.lineTo(center.dx + w, center.dy + h * 0.36);
+    path.close();
+
+    canvas.drawPath(path, Paint()..color = color..style = PaintingStyle.fill);
+  }
+
+  @override
+  bool shouldRepaint(_DirectionMarkerPainter old) => old.color != color;
 }
