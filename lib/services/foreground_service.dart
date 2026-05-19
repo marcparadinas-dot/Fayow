@@ -1,4 +1,6 @@
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 
 class ForegroundServiceManager {
   static void initialiser() {
@@ -44,20 +46,32 @@ void startCallback() {
 }
 
 class FayowTaskHandler extends TaskHandler {
+  StreamSubscription<Position>? _locationSubscription;
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    print('Foreground service démarré');
+    // Démarrer la géoloc ici, dans le service natif
+    _locationSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // mètres
+      ),
+    ).listen((Position position) {
+      // Envoyer la position au thread Flutter (map_screen)
+      FlutterForegroundTask.sendDataToMain({
+        'lat': position.latitude,
+        'lng': position.longitude,
+      });
+    });
   }
 
   @override
   void onRepeatEvent(DateTime timestamp) {
-    // Événement répété toutes les 5 secondes
-    // La détection GPS est gérée dans map_screen.dart via geolocator
-    // Ce service sert uniquement à maintenir l'appli active en arrière-plan
+    // Peut rester vide ou servir à un heartbeat de log
   }
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
-    print('Foreground service arrêté');
+    await _locationSubscription?.cancel();
   }
 }

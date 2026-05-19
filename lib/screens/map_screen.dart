@@ -20,6 +20,7 @@ import '../services/mail_service.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter_compass/flutter_compass.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -53,23 +54,36 @@ class _MapScreenState extends State<MapScreen> {
 @override
 void initState() {
   super.initState();
+  ForegroundServiceManager.initialiser();
+  ForegroundServiceManager.demarrer(); // ← direct, plus besoin de _demarrerService()
+  FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   _ttsService.initialiser();
-  _communeService.initialiser(_ttsService.tts); // ← passer l'instance
+  _communeService.initialiser(_ttsService.tts);
   _isModerator = AuthService.isModerator;
   _initLocation();
   FlutterCompass.events!.listen((CompassEvent event) {
-  if (!mounted) return;
-  if (event.heading != null) {
-    setState(() {
-      _currentHeading = event.heading!;
-    });
-  }
-});
+    if (!mounted) return;
+    if (event.heading != null) {
+      setState(() {
+        _currentHeading = event.heading!;
+      });
+    }
+  });
   _chargerPois();
+}
+
+void _onReceiveTaskData(Object data) {
+  if (data is Map<String, dynamic>) {
+    final lat = data['lat'] as double;
+    final lng = data['lng'] as double;
+    final position = LatLng(lat, lng);
+    _verifierProximite(position);
+  }
 }
 
 @override
 void dispose() {
+  FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
   _locationSubscription?.cancel();
   _ttsService.dispose();
   ForegroundServiceManager.arreter();
@@ -313,8 +327,12 @@ void _afficherDialogPoi(String message, {required Future<void> lectureTerminee})
           Navigator.of(dialogContext).pop();
         }
       });
+      
       return AlertDialog(
-        content: Text(message),
+        // On ajoute le SingleChildScrollView ici aussi pour le contenu du POI
+        content: SingleChildScrollView(
+          child: Text(message),
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -328,6 +346,7 @@ void _afficherDialogPoi(String message, {required Future<void> lectureTerminee})
     },
   );
 }
+
 /// Ferme le dialog du POI
 void _fermerDialogPoi() {
   if (mounted && Navigator.canPop(context)) {
