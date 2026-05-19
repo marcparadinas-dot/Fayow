@@ -1166,7 +1166,7 @@ Widget build(BuildContext context) {
                     label: const Text('Ajouter Anecdote',
                         style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
+                      backgroundColor: const Color.fromARGB(255, 192, 127, 42),
                       foregroundColor: Colors.white,
                     ),
                   ),
