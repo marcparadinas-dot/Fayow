@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'map_screen.dart';
+import '../services/location_service.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -38,12 +39,15 @@ class _AuthScreenState extends State<AuthScreen> {
         email:    _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const MapScreen()),
-        );
-      }
+if (mounted) {
+  await LocationService.demanderPermissions(context); // ← ajout
+  if (mounted) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const MapScreen()),
+    );
+  }
+}
     } on FirebaseAuthException catch (e) {
       setState(() { _errorMessage = _traduireErreur(e.code); });
     } catch (e) {
@@ -111,12 +115,15 @@ Future<void> _signUp() async {
           .set({'uid': uid, 'pseudo': pseudo});
     }
 
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const MapScreen()),
-      );
-    }
+if (mounted) {
+  await LocationService.demanderPermissions(context); // ← ajout
+  if (mounted) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const MapScreen()),
+    );
+  }
+}
   } on FirebaseAuthException catch (e) {
     setState(() { _errorMessage = _traduireErreur(e.code); });
   } catch (e) {
